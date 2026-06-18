@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STV · Station Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── RESET & BASE ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0a0a0a;
+    --surface:  #111115;
+    --card:     #161618;
+    --border:   #222228;
+    --amber:    #E8A020;
+    --amber-dim:#7a5210;
+    --slate:    #8899AA;
+    --slate-dim:#3a4550;
+    --white:    #F0EEE8;
+    --muted:    #555566;
+    --live-red: #E03030;
+    --font-head: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--white); font-family: var(--font-body); }
+  button { cursor: pointer; border: none; background: none; font-family: inherit; }
+  a { color: inherit; text-decoration: none; }
+
+  /* ── LAYOUT ── */
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ── MASTHEAD ── */
+  .masthead {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .masthead-logo {
+    font-family: var(--font-head); font-weight: 700; font-size: 1.15rem;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--white);
+  }
+  .masthead-logo span { color: var(--amber); }
+  .masthead-clock {
+    font-family: var(--font-head); font-size: .85rem; color: var(--slate);
+    letter-spacing: .06em;
+  }
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-head); font-size: .75rem; font-weight: 600;
+    letter-spacing: .1em; color: var(--live-red); text-transform: uppercase;
+  }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live-red); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ── SCHEDULE RAIL ── */
+  .schedule-rail {
+    display: flex; overflow-x: auto; gap: 4px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    scrollbar-width: none;
+  }
+  .schedule-rail::-webkit-scrollbar { display: none; }
+  .sched-block {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 6px 14px; border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all .18s;
+    min-width: 80px;
+  }
+  .sched-block .sched-hour {
+    font-family: var(--font-head); font-size: .68rem; font-weight: 500;
+    color: var(--slate); letter-spacing: .06em; margin-bottom: 3px;
+  }
+  .sched-block .sched-name {
+    font-family: var(--font-head); font-size: .72rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .05em; color: var(--slate);
+    white-space: nowrap;
+  }
+  .sched-block.active {
+    background: var(--amber); border-color: var(--amber);
+  }
+  .sched-block.active .sched-hour,
+  .sched-block.active .sched-name { color: #0a0a0a; }
+  .sched-block:not(.active):hover { border-color: var(--amber-dim); background: #1a1510; }
+  .sched-block.active-channel { border-color: var(--amber); }
+  .sched-block.active-channel .sched-name { color: var(--amber); }
+
+  /* ── MAIN PLAYER AREA ── */
+  .player-wrap {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 32px 20px 20px;
+    max-width: 900px; width: 100%; margin: 0 auto;
+  }
+
+  /* Now-on-air label */
+  .on-air-label {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px; width: 100%;
+  }
+  .on-air-label h2 {
+    font-family: var(--font-head); font-size: 1.4rem; font-weight: 700;
+    letter-spacing: .04em; color: var(--white);
+  }
+  .on-air-label .channel-tag {
+    font-family: var(--font-head); font-size: .72rem; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 4px;
+    background: var(--amber); color: #0a0a0a;
+  }
+  .on-air-label .type-tag {
+    font-family: var(--font-head); font-size: .72rem;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--slate); margin-left: auto;
+  }
+
+  /* ── VIDEO PLAYER ── */
+  .video-stage {
+    width: 100%; border-radius: 10px; overflow: hidden;
+    background: #000; border: 1px solid var(--border);
+    aspect-ratio: 16/9; position: relative;
+  }
+  .video-stage iframe { width: 100%; height: 100%; display: block; border: none; }
+  .video-nav {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin-top: 16px;
+  }
+  .video-nav button {
+    font-family: var(--font-head); font-size: .78rem; font-weight: 600;
+    letter-spacing: .07em; text-transform: uppercase;
+    padding: 8px 22px; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--slate);
+    background: var(--card); transition: all .15s;
+  }
+  .video-nav button:hover { border-color: var(--amber); color: var(--amber); }
+  .video-index { font-family: var(--font-head); font-size: .78rem; color: var(--muted); }
+
+  /* ── AUDIO PLAYER ── */
+  .audio-card {
+    width: 100%; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    padding: 28px 28px 24px;
+  }
+  .track-info { margin-bottom: 22px; }
+  .track-title {
+    font-family: var(--font-head); font-size: 1.25rem; font-weight: 700;
+    color: var(--white); margin-bottom: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .track-meta { font-size: .82rem; color: var(--slate); }
+
+  .progress-wrap { margin-bottom: 16px; }
+  .progress-bar {
+    width: 100%; height: 4px; background: var(--border); border-radius: 2px;
+    cursor: pointer; position: relative; margin-bottom: 8px;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 2px; background: var(--amber);
+    width: 0%; transition: width .4s linear;
+    pointer-events: none;
+  }
+  .time-row { display: flex; justify-content: space-between; font-size: .75rem; color: var(--muted); font-family: var(--font-head); }
+
+  .audio-controls {
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    margin-bottom: 20px;
+  }
+  .ctrl-btn {
+    width: 42px; height: 42px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--slate); font-size: 1rem; transition: all .15s;
+  }
+  .ctrl-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .ctrl-btn.play-btn {
+    width: 54px; height: 54px; font-size: 1.3rem;
+    background: var(--amber); border-color: var(--amber);
+    color: #0a0a0a;
+  }
+  .ctrl-btn.play-btn:hover { background: #f5b840; }
+
+  .volume-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .volume-row label { font-size: .75rem; color: var(--muted); font-family: var(--font-head); letter-spacing: .05em; min-width: 28px; }
+  .volume-row input[type=range] {
+    flex: 1; accent-color: var(--amber); height: 4px; cursor: pointer;
+  }
+
+  /* ── PLAYLIST PANEL ── */
+  .playlist-section { width: 100%; margin-top: 24px; }
+  .playlist-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .playlist-header h3 {
+    font-family: var(--font-head); font-size: .82rem; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--slate);
+  }
+  .playlist-header .track-count { font-size: .75rem; color: var(--muted); font-family: var(--font-head); }
+  .playlist-list { display: flex; flex-direction: column; gap: 2px; }
+  .playlist-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent; transition: all .15s;
+  }
+  .playlist-item:hover { background: var(--card); border-color: var(--border); }
+  .playlist-item.playing { background: #1a1407; border-color: var(--amber-dim); }
+  .playlist-item .pl-num { font-family: var(--font-head); font-size: .72rem; color: var(--muted); min-width: 22px; text-align: right; }
+  .playlist-item.playing .pl-num { color: var(--amber); }
+  .playlist-item .pl-name { font-size: .85rem; color: var(--slate); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .playlist-item.playing .pl-name { color: var(--white); }
+  .pl-eq { display: none; }
+  .playlist-item.playing .pl-eq { display: block; width: 14px; height: 14px; }
+
+  /* ── SCHEDULE CONFIG SECTION ── */
+  .config-section {
+    width: 100%; max-width: 900px; margin: 0 auto 40px;
+    padding: 0 20px;
+  }
+  .config-toggle {
+    font-family: var(--font-head); font-size: .78rem; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); border: 1px solid var(--border);
+    padding: 8px 18px; border-radius: 6px; background: var(--card);
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    transition: all .15s;
+  }
+  .config-toggle:hover { color: var(--amber); border-color: var(--amber-dim); }
+  .config-panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 22px; display: none;
+  }
+  .config-panel.open { display: block; }
+  .config-panel h3 {
+    font-family: var(--font-head); font-size: .82rem; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--slate);
+    margin-bottom: 14px;
+  }
+  .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 8px; }
+  .config-slot {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 6px; background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .config-slot .hour-label {
+    font-family: var(--font-head); font-size: .72rem; font-weight: 600;
+    color: var(--amber); min-width: 44px;
+  }
+  .config-slot select {
+    flex: 1; background: transparent; border: none; outline: none;
+    font-family: var(--font-head); font-size: .75rem; color: var(--white);
+    cursor: pointer;
+  }
+  .config-slot select option { background: #1a1a1e; }
+
+  /* ── FOOTER ── */
+  .footer {
+    padding: 16px 28px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: .72rem; color: var(--muted); font-family: var(--font-head);
+    letter-spacing: .05em;
+  }
+  .embed-snippet {
+    font-family: monospace; font-size: .7rem;
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 4px; color: var(--slate);
+    cursor: pointer; transition: all .15s;
+  }
+  .embed-snippet:hover { border-color: var(--amber); color: var(--amber); }
+  .copy-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--amber); color: #0a0a0a;
+    font-family: var(--font-head); font-size: .8rem; font-weight: 700;
+    padding: 10px 22px; border-radius: 8px; pointer-events: none;
+    opacity: 0; transition: opacity .3s;
+  }
+  .copy-toast.show { opacity: 1; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .masthead { padding: 12px 16px; }
+    .masthead-logo { font-size: 1rem; }
+    .player-wrap { padding: 20px 12px 12px; }
+    .audio-card { padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- MASTHEAD -->
+  <header class="masthead">
+    <div class="masthead-logo"><span>STV</span> · Station Manager</div>
+    <div class="live-badge"><span class="live-dot"></span>ON AIR</div>
+    <div class="masthead-clock" id="clockEl">—</div>
+  </header>
+
+  <!-- SCHEDULE RAIL -->
+  <div class="schedule-rail" id="schedRail"></div>
+
+  <!-- PLAYER -->
+  <main class="player-wrap">
+    <div class="on-air-label">
+      <h2 id="channelName">Loading…</h2>
+      <span class="channel-tag" id="channelTag">—</span>
+      <span class="type-tag" id="channelType">—</span>
+    </div>
+
+    <!-- VIDEO -->
+    <div id="videoPlayer" style="display:none; width:100%;">
+      <div class="video-stage">
+        <iframe id="vimeoFrame" allow="autoplay; fullscreen" allowfullscreen></iframe>
+      </div>
+      <div class="video-nav">
+        <button onclick="videoPrev()">← Prev</button>
+        <span class="video-index" id="videoIndex"></span>
+        <button onclick="videoNext()">Next →</button>
+      </div>
+    </div>
+
+    <!-- AUDIO -->
+    <div id="audioPlayer" style="display:none; width:100%;">
+      <div class="audio-card">
+        <div class="track-info">
+          <div class="track-title" id="trackTitle">—</div>
+          <div class="track-meta" id="trackMeta">STV Radio · Shuffled</div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar" id="progressBar" onclick="seekAudio(event)">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="time-row">
+            <span id="timeElapsed">0:00</span>
+            <span id="timeDuration">0:00</span>
+          </div>
+        </div>
+        <div class="audio-controls">
+          <button class="ctrl-btn" onclick="audioPrev()" title="Previous">&#9664;&#9664;</button>
+          <button class="ctrl-btn play-btn" id="playBtn" onclick="togglePlay()">&#9654;</button>
+          <button class="ctrl-btn" onclick="audioNext()" title="Next">&#9654;&#9654;</button>
+        </div>
+        <div class="volume-row">
+          <label>VOL</label>
+          <input type="range" id="volSlider" min="0" max="1" step="0.02" value="0.8" oninput="setVolume(this.value)">
+        </div>
+      </div>
+      <div class="playlist-section">
+        <div class="playlist-header">
+          <h3>Playlist</h3>
+          <span class="playlist-count" id="plCount"></span>
+        </div>
+        <div class="playlist-list" id="playlistEl"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- CONFIG PANEL -->
+  <div class="config-section">
+    <button class="config-toggle" onclick="toggleConfig()">
+      ⚙ Configure Schedule
+    </button>
+    <div class="config-panel" id="configPanel">
+      <h3>Hourly Schedule — Eastern Time</h3>
+      <div class="config-grid" id="configGrid"></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <span>G4E MOVEMENT STUDIO · Lithonia, GA</span>
+    <button class="embed-snippet" onclick="copyEmbed()" title="Copy embed code">
+      &lt;iframe embed&gt; · click to copy
+    </button>
+    <span>© 2026 STV Network</span>
+  </footer>
+
+</div>
+
+<!-- TOAST -->
+<div class="copy-toast" id="toast">Embed code copied!</div>
+
+<audio id="audioEl" preload="auto"></audio>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  CHANNEL & PLAYLIST CONFIG
+//  Edit these objects to update your content
+// ══════════════════════════════════════════════════════
+
+const CHANNELS = {
+  jazz: {
+    name: 'Jazz',
+    tag: 'CH 1',
+    type: 'Audio · MP3',
+    kind: 'audio',
+    tracks: [
+      // Pulled from stvradiomeltdown repo — add raw GitHub MP3 URLs here
+      // Format: { title: 'Track Name', url: 'https://raw.githubusercontent.com/...' }
+      { title: 'Jazz Track 01', url: 'PLACEHOLDER_JAZZ_01.mp3' },
+      { title: 'Jazz Track 02', url: 'PLACEHOLDER_JAZZ_02.mp3' },
+      { title: 'Jazz Track 03', url: 'PLACEHOLDER_JAZZ_03.mp3' },
+    ]
+  },
+  hiphop: {
+    name: 'Hip Hop',
+    tag: 'CH 2',
+    type: 'Audio · MP3',
+    kind: 'audio',
+    tracks: [
+      { title: 'Hip Hop Track 01', url: 'PLACEHOLDER_HIPHOP_01.mp3' },
+      { title: 'Hip Hop Track 02', url: 'PLACEHOLDER_HIPHOP_02.mp3' },
+      { title: 'Hip Hop Track 03', url: 'PLACEHOLDER_HIPHOP_03.mp3' },
+    ]
+  },
+  gospel: {
+    name: 'Gospel',
+    tag: 'CH 3',
+    type: 'Audio · MP3',
+    kind: 'audio',
+    tracks: [
+      { title: 'Gospel Track 01', url: 'PLACEHOLDER_GOSPEL_01.mp3' },
+      { title: 'Gospel Track 02', url: 'PLACEHOLDER_GOSPEL_02.mp3' },
+      { title: 'Gospel Track 03', url: 'PLACEHOLDER_GOSPEL_03.mp3' },
+    ]
+  },
+  film: {
+    name: 'Film / TV / EDU',
+    tag: 'CH 4',
+    type: 'Video · Vimeo',
+    kind: 'video',
+    videos: [
+      { id: '1201972455', title: 'XOCO Film Feature 1' },
+      { id: '1201973030', title: 'XOCO Film Feature 2' },
+      { id: '1201973029', title: 'XOCO Film Feature 3' },
+    ]
+  },
+  fashion: {
+    name: 'Fashion News',
+    tag: 'CH 5',
+    type: 'Video · Vimeo',
+    kind: 'video',
+    videos: [
+      { id: '1201452576', title: 'STV Fashion Report 1' },
+      { id: '1201185045', title: 'STV Fashion Report 2' },
+      // Add more Vimeo IDs here
+    ]
+  },
+};
+
+// ── HOURLY SCHEDULE (24-hour clock, Eastern)
+// Edit each hour to point to a channel key above
+let SCHEDULE = {
+   0: 'jazz',   1: 'hiphop',  2: 'gospel',  3: 'jazz',
+   4: 'hiphop', 5: 'gospel',  6: 'jazz',    7: 'gospel',
+   8: 'hiphop', 9: 'film',   10: 'fashion', 11: 'film',
+  12: 'jazz',  13: 'hiphop', 14: 'gospel',  15: 'film',
+  16: 'fashion',17: 'jazz',  18: 'hiphop',  19: 'gospel',
+  20: 'film',  21: 'fashion', 22: 'jazz',   23: 'hiphop',
+};
+
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
+let currentChannel = null;
+let currentTrackIdx = 0;
+let currentVideoIdx = 0;
+let shuffledTracks = [];
+let shuffledVideos = [];
+let lastHour = -1;
+
+const audioEl    = document.getElementById('audioEl');
+const playBtn    = document.getElementById('playBtn');
+const progressFill = document.getElementById('progressFill');
+const timeElapsed  = document.getElementById('timeElapsed');
+const timeDuration = document.getElementById('timeDuration');
+
+// ── shuffle helper
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function fmtTime(s) {
+  if (!isFinite(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = String(Math.floor(s % 60)).padStart(2, '0');
+  return `${m}:${sec}`;
+}
+
+function getEasternHour() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return et.getHours();
+}
+
+// ══════════════════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const h = et.getHours(), m = et.getMinutes(), s = et.getSeconds();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 || 12;
+  document.getElementById('clockEl').textContent =
+    `${String(hh).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ET`;
+  // Auto-switch on new hour
+  if (m === 0 && s === 0 && h !== lastHour) {
+    loadScheduledChannel();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  SCHEDULE RAIL
+// ══════════════════════════════════════════════════════
+function buildScheduleRail() {
+  const rail = document.getElementById('schedRail');
+  rail.innerHTML = '';
+  const currentHour = getEasternHour();
+
+  for (let h = 0; h < 24; h++) {
+    const key = SCHEDULE[h];
+    const ch = CHANNELS[key];
+    const div = document.createElement('div');
+    div.className = 'sched-block' + (h === currentHour ? ' active' : '');
+    div.dataset.hour = h;
+
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hh = h % 12 || 12;
+    div.innerHTML = `
+      <span class="sched-hour">${hh}${ampm}</span>
+      <span class="sched-name">${ch ? ch.name : '—'}</span>`;
+    div.onclick = () => loadChannel(key);
+    rail.appendChild(div);
+  }
+
+  // Scroll active into view
+  const active = rail.querySelector('.active');
+  if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function highlightRail(channelKey) {
+  document.querySelectorAll('.sched-block').forEach(b => {
+    const key = SCHEDULE[parseInt(b.dataset.hour)];
+    b.classList.toggle('active-channel', key === channelKey);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  CHANNEL LOADER
+// ══════════════════════════════════════════════════════
+function loadScheduledChannel() {
+  const h = getEasternHour();
+  lastHour = h;
+  buildScheduleRail();
+  const key = SCHEDULE[h] || 'jazz';
+  loadChannel(key);
+}
+
+function loadChannel(key) {
+  if (!CHANNELS[key]) return;
+  currentChannel = key;
+  const ch = CHANNELS[key];
+
+  document.getElementById('channelName').textContent = ch.name;
+  document.getElementById('channelTag').textContent  = ch.tag;
+  document.getElementById('channelType').textContent = ch.type;
+
+  highlightRail(key);
+  saveSchedule();
+
+  if (ch.kind === 'video') {
+    document.getElementById('audioPlayer').style.display = 'none';
+    document.getElementById('videoPlayer').style.display = 'block';
+    shuffledVideos = shuffle(ch.videos);
+    currentVideoIdx = 0;
+    loadVideo();
+  } else {
+    document.getElementById('videoPlayer').style.display = 'none';
+    document.getElementById('audioPlayer').style.display = 'block';
+    audioEl.pause();
+    shuffledTracks = shuffle(ch.tracks);
+    currentTrackIdx = 0;
+    loadTrack(true);
+    buildPlaylist();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  VIDEO
+// ══════════════════════════════════════════════════════
+function loadVideo() {
+  const v = shuffledVideos[currentVideoIdx];
+  if (!v) return;
+  document.getElementById('vimeoFrame').src =
+    `https://player.vimeo.com/video/${v.id}?autoplay=1&title=0&byline=0&portrait=0&color=E8A020`;
+  document.getElementById('videoIndex').textContent =
+    `${currentVideoIdx + 1} / ${shuffledVideos.length}`;
+}
+
+function videoPrev() {
+  currentVideoIdx = (currentVideoIdx - 1 + shuffledVideos.length) % shuffledVideos.length;
+  loadVideo();
+}
+function videoNext() {
+  currentVideoIdx = (currentVideoIdx + 1) % shuffledVideos.length;
+  loadVideo();
+}
+
+// ══════════════════════════════════════════════════════
+//  AUDIO
+// ══════════════════════════════════════════════════════
+function loadTrack(autoplay = true) {
+  const t = shuffledTracks[currentTrackIdx];
+  if (!t) return;
+  audioEl.src = t.url;
+  audioEl.volume = parseFloat(document.getElementById('volSlider').value);
+
+  // Clean display name
+  const name = t.title || t.url.split('/').pop().replace(/\.mp3$/i, '').replace(/_/g, ' ');
+  document.getElementById('trackTitle').textContent = name;
+  document.getElementById('trackMeta').textContent =
+    `${CHANNELS[currentChannel]?.name || ''} · Track ${currentTrackIdx + 1} of ${shuffledTracks.length}`;
+
+  updatePlaylistHighlight();
+
+  if (autoplay) {
+    audioEl.play().catch(() => {});
+    playBtn.innerHTML = '&#9646;&#9646;';
+  }
+}
+
+function buildPlaylist() {
+  const el = document.getElementById('playlistEl');
+  el.innerHTML = '';
+  document.getElementById('plCount').textContent = `${shuffledTracks.length} tracks`;
+  shuffledTracks.forEach((t, i) => {
+    const name = t.title || t.url.split('/').pop().replace(/\.mp3$/i, '').replace(/_/g, ' ');
+    const div = document.createElement('div');
+    div.className = 'playlist-item' + (i === currentTrackIdx ? ' playing' : '');
+    div.dataset.idx = i;
+    div.innerHTML = `
+      <span class="pl-num">${i === currentTrackIdx ? '▶' : i + 1}</span>
+      <span class="pl-name">${name}</span>
+      <svg class="pl-eq" viewBox="0 0 14 14" fill="none">
+        <rect x="0" y="4" width="2" height="10" fill="#E8A020"><animate attributeName="height" values="10;4;10" dur=".8s" repeatCount="indefinite"/><animate attributeName="y" values="4;10;4" dur=".8s" repeatCount="indefinite"/></rect>
+        <rect x="4" y="2" width="2" height="12" fill="#E8A020"><animate attributeName="height" values="12;5;12" dur="1s" repeatCount="indefinite"/><animate attributeName="y" values="2;9;2" dur="1s" repeatCount="indefinite"/></rect>
+        <rect x="8" y="6" width="2" height="8" fill="#E8A020"><animate attributeName="height" values="8;3;8" dur=".7s" repeatCount="indefinite"/><animate attributeName="y" values="6;11;6" dur=".7s" repeatCount="indefinite"/></rect>
+        <rect x="12" y="3" width="2" height="11" fill="#E8A020"><animate attributeName="height" values="11;6;11" dur=".9s" repeatCount="indefinite"/><animate attributeName="y" values="3;8;3" dur=".9s" repeatCount="indefinite"/></rect>
+      </svg>`;
+    div.onclick = () => { currentTrackIdx = i; loadTrack(true); buildPlaylist(); };
+    el.appendChild(div);
+  });
+}
+
+function updatePlaylistHighlight() {
+  document.querySelectorAll('.playlist-item').forEach(item => {
+    const i = parseInt(item.dataset.idx);
+    item.classList.toggle('playing', i === currentTrackIdx);
+    item.querySelector('.pl-num').textContent = i === currentTrackIdx ? '▶' : i + 1;
+  });
+}
+
+function togglePlay() {
+  if (audioEl.paused) {
+    audioEl.play();
+    playBtn.innerHTML = '&#9646;&#9646;';
+  } else {
+    audioEl.pause();
+    playBtn.innerHTML = '&#9654;';
+  }
+}
+function audioPrev() {
+  currentTrackIdx = (currentTrackIdx - 1 + shuffledTracks.length) % shuffledTracks.length;
+  loadTrack(true); buildPlaylist();
+}
+function audioNext() {
+  currentTrackIdx = (currentTrackIdx + 1) % shuffledTracks.length;
+  loadTrack(true); buildPlaylist();
+}
+function setVolume(v) { audioEl.volume = v; }
+function seekAudio(e) {
+  if (!audioEl.duration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  audioEl.currentTime = pct * audioEl.duration;
+}
+
+// Progress updates
+audioEl.addEventListener('timeupdate', () => {
+  const pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration) * 100 : 0;
+  progressFill.style.width = pct + '%';
+  timeElapsed.textContent  = fmtTime(audioEl.currentTime);
+  timeDuration.textContent = fmtTime(audioEl.duration);
+});
+audioEl.addEventListener('ended', () => { audioNext(); });
+audioEl.addEventListener('play',  () => { playBtn.innerHTML = '&#9646;&#9646;'; });
+audioEl.addEventListener('pause', () => { playBtn.innerHTML = '&#9654;'; });
+
+// ══════════════════════════════════════════════════════
+//  CONFIG PANEL
+// ══════════════════════════════════════════════════════
+function buildConfigGrid() {
+  const grid = document.getElementById('configGrid');
+  grid.innerHTML = '';
+  for (let h = 0; h < 24; h++) {
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hh = h % 12 || 12;
+    const slot = document.createElement('div');
+    slot.className = 'config-slot';
+    const sel = document.createElement('select');
+    sel.dataset.hour = h;
+    Object.entries(CHANNELS).forEach(([k, ch]) => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = ch.name;
+      if (SCHEDULE[h] === k) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => {
+      SCHEDULE[h] = sel.value;
+      buildScheduleRail();
+      highlightRail(currentChannel);
+    };
+    slot.innerHTML = `<span class="hour-label">${String(hh).padStart(2,'0')}:00 ${ampm}</span>`;
+    slot.appendChild(sel);
+    grid.appendChild(slot);
+  }
+}
+
+function toggleConfig() {
+  const p = document.getElementById('configPanel');
+  if (!p.classList.contains('open')) buildConfigGrid();
+  p.classList.toggle('open');
+}
+
+// ══════════════════════════════════════════════════════
+//  PERSISTENCE
+// ══════════════════════════════════════════════════════
+function saveSchedule() {
+  try { localStorage.setItem('stv_schedule', JSON.stringify(SCHEDULE)); } catch(e){}
+}
+function loadSavedSchedule() {
+  try {
+    const s = localStorage.getItem('stv_schedule');
+    if (s) SCHEDULE = { ...SCHEDULE, ...JSON.parse(s) };
+  } catch(e){}
+}
+
+// ══════════════════════════════════════════════════════
+//  EMBED COPY
+// ══════════════════════════════════════════════════════
+function copyEmbed() {
+  const url = window.location.href.split('?')[0];
+  const snippet = `<iframe src="${url}" width="100%" height="700" frameborder="0" allow="autoplay" style="border-radius:10px;"></iframe>`;
+  navigator.clipboard.writeText(snippet).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }).catch(() => {
+    prompt('Copy this embed code:', snippet);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+loadSavedSchedule();
+setInterval(updateClock, 1000);
+updateClock();
+loadScheduledChannel();
+</script>
+</body>
+</html>
